@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>Eyesight Screening</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header><h1>👁️ Eyesight Screening</h1></header>
+
+  <!-- 1. Welcome -->
+  <section id="s-welcome" class="screen active">
+    <p class="warn">⚠️ This is a <b>screening estimate only</b>, not a medical diagnosis. Results depend on your screen, lighting and distance. If you have any concern, see an eye doctor.</p>
+    <p>The test takes about 5 minutes. You will need a <b>credit / ATM / ID card</b> and a <b>tape or string</b>.</p>
+    <button id="b-welcome" class="primary">Start</button>
+  </section>
+
+  <!-- 2. Screen calibration -->
+  <section id="s-screen" class="screen">
+    <h2>Step 1 - Calibrate the screen</h2>
+    <p>Hold the card flat against the screen. Move the slider until the blue bar is <b>exactly as wide as the card</b>.</p>
+    <div id="card-bar">Card width</div>
+    <input id="card-slider" type="range" min="120" max="900" value="324">
+    <button id="b-screen" class="primary">Next</button>
+  </section>
+
+  <!-- 3. Camera calibration (once) -->
+  <section id="s-camera" class="screen">
+    <h2>Step 2 - Calibrate the camera</h2>
+    <p>Measure <b id="cal-cm">50 cm</b> with your tape from the camera to your eyes. Sit still at exactly that distance, look at the camera, then press Calibrate.</p>
+    <div class="videobox"><video id="cal-video" playsinline muted></video></div>
+    <p id="cal-status" class="status">Starting camera...</p>
+    <p id="debug" class="status small"></p>
+    <button id="b-cal" class="primary" disabled>Calibrate</button>
+    <button id="b-cal-retry" class="link" hidden>Retry camera</button>
+    <button id="b-cal-skip" class="link" hidden>Already calibrated on this device - skip</button>
+  </section>
+
+  <!-- 4. Setup + live distance guide -->
+  <section id="s-setup" class="screen">
+    <h2>Step 3 - Get in position</h2>
+    <label>Test distance
+      <select id="dist-select">
+        <option value="0.4">40 cm (phone)</option>
+        <option value="0.5" selected>50 cm</option>
+        <option value="0.6">60 cm</option>
+        <option value="1.0">100 cm (laptop / webcam)</option>
+      </select>
+    </label>
+    <ul class="tips">
+      <li>Sit in a <b>bright room</b>, light behind or beside you, no glare on the screen.</li>
+      <li>Set the screen to <b>maximum brightness</b>.</li>
+      <li>Take your <b>glasses off</b>.</li>
+    </ul>
+    <div class="videobox"><video id="setup-video" playsinline muted></video></div>
+    <div id="dist-signal" class="signal">Looking for your face...</div>
+    <div id="light-signal" class="signal small"></div>
+    <button id="b-setup" class="primary" disabled>Start test</button>
+  </section>
+
+  <!-- 5. Test -->
+  <section id="s-test" class="screen">
+    <div id="test-info"></div>
+    <div id="letter-box"><div id="letter"></div><div id="pause-msg" hidden></div></div>
+    <div id="test-dist" class="signal small"></div>
+    <div class="videobox mini"><video id="test-video" playsinline muted></video></div>
+    <div id="answers">
+      <button data-a="up">⬆️</button>
+      <button data-a="left">⬅️</button>
+      <button data-a="right">➡️</button>
+      <button data-a="down">⬇️</button>
+      <button data-a="?" class="wide">🤷 Can't see</button>
+    </div>
+    <button id="b-continue" class="primary" hidden>Continue</button>
+  </section>
+
+  <!-- 6. Result -->
+  <section id="s-result" class="screen">
+    <h2>Your screening result</h2>
+    <div id="result"></div>
+    <p class="warn">⚠️ Screening estimate only, not a medical diagnosis. See an eye doctor if you have any concern.</p>
+    <button id="b-again" class="primary">Test again</button>
+  </section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
