@@ -28,8 +28,13 @@ input[type=range] { width: 100%; margin: 14px 0; }
 #letter svg { display: block; }
 #pause-msg { position: absolute; inset: 0; background: #fff; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; font-weight: 600; }
 #pause-msg[hidden], #b-continue[hidden] { display: none; }
-#answers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
-#answers button { padding: 16px 0; font-size: 1.4rem; }
+#letter { display: flex; flex-wrap: wrap; justify-content: center; }
+.letterline { display: flex; flex-wrap: wrap; justify-content: center; background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 30px 10px; margin: 8px 0; }
+.typed { min-height: 1.6em; text-align: center; font-size: 1.3rem; letter-spacing: .4em; font-weight: 700; margin: 8px 0; }
+#answers, .pad-letters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+#answers.pad-letters, #near-pad.pad-letters { grid-template-columns: repeat(5, 1fr); }
+#answers button, .pad-letters button { padding: 16px 0; font-size: 1.4rem; }
+.pad-letters button { font-weight: 700; font-size: 1.2rem; }
 #answers button[data-a="up"] { grid-column: 2; }
 #answers button[data-a="left"] { grid-column: 1; grid-row: 2; }
 #answers button[data-a="right"] { grid-column: 3; grid-row: 2; }

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2563eb">
 <title>Eyesight Screening</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,6 +43,12 @@
   <!-- 4. Setup + live distance guide -->
   <section id="s-setup" class="screen">
     <h2>Step 3 - Get in position</h2>
+    <label>Test type
+      <select id="mode-select">
+        <option value="letters" selected>Letters (C D H K N O R S V Z)</option>
+        <option value="e">Tumbling E (children / cannot read letters)</option>
+      </select>
+    </label>
     <label>Test distance
       <select id="dist-select">
         <option value="0.4">40 cm (phone)</option>
@@ -65,15 +72,10 @@
   <section id="s-test" class="screen">
     <div id="test-info"></div>
     <div id="letter-box"><div id="letter"></div><div id="pause-msg" hidden></div></div>
+    <div id="typed" class="typed"></div>
     <div id="test-dist" class="signal small"></div>
     <div class="videobox mini"><video id="test-video" playsinline muted></video></div>
-    <div id="answers">
-      <button data-a="up">⬆️</button>
-      <button data-a="left">⬅️</button>
-      <button data-a="right">➡️</button>
-      <button data-a="down">⬇️</button>
-      <button data-a="?" class="wide">🤷 Can't see</button>
-    </div>
+    <div id="answers"></div>
     <button id="b-continue" class="primary" hidden>Continue</button>
   </section>
 
@@ -81,8 +83,26 @@
   <section id="s-result" class="screen">
     <h2>Your screening result</h2>
     <div id="result"></div>
+    <div id="near-result"></div>
     <p class="warn">⚠️ Screening estimate only, not a medical diagnosis. See an eye doctor if you have any concern.</p>
-    <button id="b-again" class="primary">Test again</button>
+    <button id="b-near" class="primary">Extra test: estimate nearsightedness</button>
+    <button id="b-again">Finish / test again</button>
+  </section>
+
+  <!-- 7. Nearsightedness estimate (far-point method) -->
+  <section id="s-near" class="screen">
+    <h2>Nearsightedness estimate</h2>
+    <p>Hold the phone at <b>arm's length</b> with <b>both eyes open</b>, glasses off. The letters are very small. <b>Slowly bring the phone closer</b> until you can read <b>all 5 letters clearly</b>, then stop and press the button.</p>
+    <div class="videobox mini"><video id="near-video" playsinline muted></video></div>
+    <div id="near-dist" class="signal">Looking for your face...</div>
+    <div id="near-letters" class="letterline"></div>
+    <div id="near-entry" hidden>
+      <p id="near-entry-msg"><b>Tap the 5 letters you saw, in order.</b></p>
+      <div id="near-typed" class="typed"></div>
+      <div id="near-pad" class="pad-letters"></div>
+    </div>
+    <button id="b-near-clear" class="primary">I can read them clearly</button>
+    <button id="b-near-back" class="link">Back to results</button>
   </section>
 </main>
 <script type="module" src="js/app.js"></script>

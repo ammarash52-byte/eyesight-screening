@@ -1,9 +1,11 @@
 import * as V from "./vision.js";
 import * as cam from "./camera.js";
+import { SLOAN, letterSvg } from "./letters.js";
 
 const $ = (id) => document.getElementById(id);
 const CAL_DISTANCE_MM = 500;
 const NO_FACE_GRACE_MS = 2500;
+const NEAR_STABLE_RATIO = 0.2; // must stay within 20% of the captured distance while answering
 
 // ---- persisted calibration -------------------------------------------------
 const store = {
@@ -17,11 +19,13 @@ const store = {
 
 const app = {
   screen: "welcome",
+  mode: "letters", // "letters" | "e"
   pxPerMm: store.get("pxPerMm"),
   focal: store.get("focal"), // { px, frameWidth }
   targetMm: 500,
-  live: { mm: null, light: null, lastFaceAt: 0, irisPx: null },
+  live: { mm: null, light: null, lastFaceAt: 0, irisPx: null, history: [] },
   test: null,
+  near: null,
 };
 
 function show(name) {
@@ -101,26 +105,39 @@ function startLoop() {
 }
 
 // Detect on the video that is actually visible on the current screen (hidden videos may not decode frames).
-const SCREEN_VIDEO = { camera: "cal-video", setup: "setup-video", test: "test-video" };
+const SCREEN_VIDEO = { camera: "cal-video", setup: "setup-video", test: "test-video", near: "near-video" };
 
 function sample() {
-  const video = $(SCREEN_VIDEO[app.screen] || "setup-video");
+  const id = SCREEN_VIDEO[app.screen];
+  if (!id) return;
+  const video = $(id);
   const m = cam.measureIris(video);
   $("debug").textContent = `video ${video.videoWidth}x${video.videoHeight}, ready=${video.readyState}, face=${m ? "yes" : "no"}`;
   const live = app.live;
+  const now = performance.now();
   live.light = cam.brightness(video);
   if (m) {
-    live.lastFaceAt = performance.now();
+    live.lastFaceAt = now;
     live.irisPx = m.irisPx;
     if (app.focal) {
       const mm = V.distanceMm(currentFocalPx(m.frameWidth), m.irisPx);
       live.mm = live.mm == null ? mm : live.mm * 0.6 + mm * 0.4; // light smoothing
+      live.history.push({ t: now, mm: live.mm });
     }
     live.frameWidth = m.frameWidth;
   }
+  live.history = live.history.filter((h) => now - h.t < 3000);
   if (app.screen === "camera") updateCalibrationUI(!!m);
   else if (app.screen === "setup") updateSetupUI();
   else if (app.screen === "test") updateTestGuard();
+  else if (app.screen === "near") updateNearUI();
+}
+
+// Median of the distance readings from the last `windowMs`, or null if there are too few.
+function recentDistanceMm(windowMs) {
+  const now = performance.now();
+  const vals = app.live.history.filter((h) => now - h.t < windowMs).map((h) => h.mm).sort((a, b) => a - b);
+  return vals.length >= 4 ? vals[Math.floor(vals.length / 2)] : null;
 }
 
 // ---- camera calibration ----------------------------------------------------
@@ -152,6 +169,7 @@ $("b-cal").onclick = async () => {
   app.focal = { px: V.focalFromKnownDistance(median.px, CAL_DISTANCE_MM), frameWidth: median.w };
   store.set("focal", app.focal);
   app.live.mm = null;
+  app.live.history = [];
   goSetup();
 };
 $("b-cal-skip").onclick = () => goSetup();
@@ -197,15 +215,31 @@ function updateSetupUI() {
 }
 
 $("b-setup").onclick = () => {
-  // Judge sharpness in physical pixels (a phone packs 2-3 physical pixels into each CSS pixel).
-  const levels = V.usableLevels(app.targetMm / 1000, app.pxPerMm * (window.devicePixelRatio || 1));
+  app.mode = $("mode-select").value;
+  const view = {
+    pxPerMm: app.pxPerMm,
+    dpr: window.devicePixelRatio || 1, // sharpness is judged in physical pixels
+    boxW: Math.min(window.innerWidth, 560) - 52,
+    boxH: Math.round(window.innerHeight * 0.45),
+    count: app.mode === "letters" ? V.LETTERS_PER_LINE : 1,
+  };
+  const levels = V.usableLevels(app.targetMm / 1000, view);
+  if (levels.length < 3) {
+    $("dist-signal").textContent = "This screen is too small for this distance - choose a different distance.";
+    $("dist-signal").className = "signal bad";
+    return;
+  }
   app.test = { levels, results: {} };
   beginEye("Right");
 };
 
-// ---- the E test ------------------------------------------------------------
+// ---- the test --------------------------------------------------------------
+function newSequence() {
+  return app.mode === "letters" ? V.newLetterLine(SLOAN) : V.newLine();
+}
+
 function beginEye(eye) {
-  Object.assign(app.test, { eye, li: 0, lastPass: null, seq: V.newLine(), pos: 0, wrong: 0, phase: "test" });
+  Object.assign(app.test, { eye, li: 0, lastPass: null, seq: newSequence(), pos: 0, wrong: 0, typed: [], phase: "test" });
   show("test");
   cam.attach($("test-video"));
   renderTest();
@@ -219,25 +253,54 @@ function eSvg(px, direction) {
     <rect x="0" y="2" width="5" height="1"/><rect x="0" y="4" width="5" height="1"/></svg>`;
 }
 
+function buildPad() {
+  const pad = $("answers");
+  if (pad.dataset.mode === app.mode) return;
+  pad.dataset.mode = app.mode;
+  pad.className = app.mode === "letters" ? "pad-letters" : "";
+  pad.innerHTML = app.mode === "letters"
+    ? SLOAN.map((c) => `<button data-a="${c}">${c}</button>`).join("") +
+      `<button data-a="?" class="wide">🤷 Can't see this letter</button>`
+    : `<button data-a="up">⬆️</button><button data-a="left">⬅️</button><button data-a="right">➡️</button>
+       <button data-a="down">⬇️</button><button data-a="?" class="wide">🤷 Can't see</button>`;
+}
+
+function typedText(typed) {
+  return Array.from({ length: V.LETTERS_PER_LINE }, (_, i) => typed[i] ?? "•").join(" ");
+}
+
 function renderTest() {
   const t = app.test;
   const switching = t.phase === "switch";
   $("answers").hidden = switching;
+  $("typed").hidden = switching || app.mode !== "letters";
   $("b-continue").hidden = !switching;
   $("letter-box").hidden = switching;
   if (switching) {
     $("test-info").innerHTML = "<h3>Right eye done ✅</h3><p>Now cover your <b>right</b> eye with your palm, then press Continue.</p>";
     return;
   }
+  buildPad();
   const cover = t.eye === "Right" ? "left" : "right";
-  $("test-info").innerHTML = `<p>Testing your <b>${t.eye.toLowerCase()}</b> eye. Cover your <b>${cover}</b> eye with your palm (don't press). Tap the direction the <b>E</b> points.</p>`;
-  const lv = t.levels[t.li];
-  const px = V.letterHeightMm(lv, app.targetMm / 1000) * app.pxPerMm;
-  $("letter").innerHTML = eSvg(px, t.seq[t.pos]);
-  $("letter").style.padding = `${Math.max(px, 40)}px`;
+  const how = app.mode === "letters"
+    ? "Read the 5 letters from left to right and tap each one below (tap 🤷 if you can't see it)."
+    : "Tap the direction the <b>E</b> points.";
+  $("test-info").innerHTML = `<p>Testing your <b>${t.eye.toLowerCase()}</b> eye. Cover your <b>${cover}</b> eye with your palm (don't press). ${how}</p>`;
+  const px = V.letterHeightMm(t.levels[t.li], app.targetMm / 1000) * app.pxPerMm;
+  const box = $("letter");
+  if (app.mode === "letters") {
+    box.style.gap = `${px * V.GAP_FACTOR}px`;
+    box.style.padding = `${Math.max(px * 0.5, 24)}px 10px`;
+    box.innerHTML = t.seq.map((c) => letterSvg(c, px)).join("");
+    $("typed").textContent = typedText(t.typed);
+  } else {
+    box.style.gap = "0";
+    box.style.padding = `${Math.max(px * 0.4, 24)}px`;
+    box.innerHTML = eSvg(px, t.seq[t.pos]);
+  }
 }
 
-// While testing, hide the letter if the person is too near/far or the face is lost for a while.
+// While testing, hide the letters if the person is too near/far or the face is lost for a while.
 function updateTestGuard() {
   const t = app.test;
   if (!t || t.phase !== "test") return;
@@ -272,26 +335,29 @@ function answer(choice) {
   const t = app.test;
   if (t.phase !== "test" || !$("pause-msg").hidden) return; // ignore taps while paused
   if (choice !== t.seq[t.pos]) t.wrong += 1;
+  t.typed.push(choice === "?" ? "?" : choice);
   t.pos += 1;
   if (t.wrong > V.MAX_WRONG_PER_LINE) return finishEye();
   if (t.pos === V.LETTERS_PER_LINE) {
     t.lastPass = t.levels[t.li];
     t.li += 1;
     if (t.li >= t.levels.length) return finishEye();
-    t.seq = V.newLine();
+    t.seq = newSequence();
     t.pos = 0;
     t.wrong = 0;
+    t.typed = [];
   }
   renderTest();
 }
 
-document.querySelectorAll("#answers button").forEach((b) => { b.onclick = () => answer(b.dataset.a); });
+$("answers").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (b) answer(b.dataset.a);
+};
 $("b-continue").onclick = () => beginEye("Left");
 
 // ---- result ----------------------------------------------------------------
 function showResult() {
-  loopRunning = false;
-  cam.stopCamera();
   const rows = ["Right", "Left"].map((eye) => {
     const acuity = app.test.results[eye];
     const [category, advice] = V.grade(acuity);
@@ -302,4 +368,116 @@ function showResult() {
   show("result");
 }
 
-$("b-again").onclick = () => show("welcome");
+$("b-again").onclick = () => {
+  loopRunning = false;
+  cam.stopCamera();
+  app.live.mm = null;
+  app.live.history = [];
+  $("near-result").innerHTML = "";
+  show("welcome");
+};
+
+// ---- nearsightedness estimate (far-point method) ---------------------------
+$("b-near").onclick = async () => {
+  app.near = { phase: "look", seq: V.newLetterLine(SLOAN), typed: [], capturedMm: null };
+  show("near");
+  renderNear(); // draw the letters first so they never depend on the camera
+  try {
+    await cam.attach($("near-video"));
+  } catch (err) {
+    $("near-dist").textContent = `Camera problem: ${err.message}`;
+  }
+};
+
+function renderNear() {
+  const n = app.near;
+  const px = V.NEAR_LETTER_MM * app.pxPerMm;
+  const row = $("near-letters");
+  row.style.gap = `${px * V.GAP_FACTOR}px`;
+  row.innerHTML = n.seq.map((c) => letterSvg(c, px)).join("");
+  $("near-entry").hidden = n.phase !== "enter";
+  $("b-near-clear").hidden = n.phase !== "look";
+  $("near-typed").textContent = typedText(n.typed);
+  if (!$("near-pad").dataset.built) {
+    $("near-pad").dataset.built = "1";
+    $("near-pad").innerHTML = SLOAN.map((c) => `<button data-a="${c}">${c}</button>`).join("") +
+      `<button data-a="?" class="wide">🤷 Can't see this letter</button>`;
+  }
+}
+
+function updateNearUI() {
+  const live = app.live;
+  const sig = $("near-dist");
+  if (app.near.phase === "enter") return; // keep the message from the capture step
+  const faceVisible = performance.now() - live.lastFaceAt < 800 && live.mm != null;
+  if (live.light == null) {
+    sig.textContent = "Camera is not sending video.";
+    sig.className = "signal bad";
+  } else if (!faceVisible) {
+    sig.textContent = "Looking for your face...";
+    sig.className = "signal";
+  } else if (live.mm < V.NEAR_MIN_MM) {
+    sig.textContent = `Too close to measure (${Math.round(live.mm / 10)} cm) - move back a little`;
+    sig.className = "signal bad";
+  } else {
+    sig.textContent = `Distance: ${Math.round(live.mm / 10)} cm`;
+    sig.className = "signal ok";
+  }
+}
+
+$("b-near-clear").onclick = () => {
+  const n = app.near;
+  const mm = performance.now() - app.live.lastFaceAt < 1000 ? recentDistanceMm(1200) : null;
+  if (mm == null) {
+    $("near-dist").textContent = "Can't measure your distance - keep your face in view and try again.";
+    $("near-dist").className = "signal bad";
+    return;
+  }
+  if (mm < V.NEAR_MIN_MM) {
+    $("near-dist").textContent = "Too close to measure - move back a little and try again.";
+    $("near-dist").className = "signal bad";
+    return;
+  }
+  n.capturedMm = mm;
+  n.phase = "enter";
+  n.typed = [];
+  $("near-dist").textContent = `Measured distance: ${Math.round(mm / 10)} cm. Stay at this distance and read the letters.`;
+  $("near-dist").className = "signal ok";
+  renderNear();
+};
+
+$("near-pad").onclick = (e) => {
+  const b = e.target.closest("button");
+  const n = app.near;
+  if (!b || n.phase !== "enter") return;
+  n.typed.push(b.dataset.a);
+  if (n.typed.length < V.LETTERS_PER_LINE) return renderNear();
+  const correct = n.typed.filter((c, i) => c === n.seq[i]).length;
+  const nowMm = performance.now() - app.live.lastFaceAt < 1500 ? app.live.mm : null;
+  const moved = nowMm != null && Math.abs(nowMm - n.capturedMm) / n.capturedMm > NEAR_STABLE_RATIO;
+  if (correct >= V.LETTERS_PER_LINE - 1 && !moved) {
+    $("near-result").innerHTML = nearResultHtml(n.capturedMm);
+    return show("result");
+  }
+  // Not accepted: new letters, ask the person to try again.
+  app.near = { phase: "look", seq: V.newLetterLine(SLOAN), typed: [], capturedMm: null };
+  renderNear();
+  $("near-dist").textContent = moved
+    ? "You moved while answering. Hold still at the distance where it first became clear, then try again."
+    : "Not quite right - bring the phone a little closer until the letters are really clear, then try again.";
+  $("near-dist").className = "signal bad";
+};
+
+function nearResultHtml(mm) {
+  const cm = Math.round(mm / 10);
+  const est = V.nearEstimate(mm);
+  if (est.kind === "none") {
+    return `<h3>Nearsightedness estimate</h3><p>You read the tiny letters clearly from about <b>${cm} cm</b> (arm's length). Significant nearsightedness is unlikely. This test cannot detect farsightedness or astigmatism.</p>`;
+  }
+  return `<h3>Nearsightedness estimate</h3><p>You read the tiny letters clearly at about <b>${cm} cm</b>. Rough estimate: about <b>-${est.lo.toFixed(1)} to -${est.hi.toFixed(1)}</b> (best guess -${est.d.toFixed(1)}). This is only a rough guide for nearsightedness (not for farsightedness or astigmatism) and is less reliable over age 40. An eye test gives the real number.</p>`;
+}
+
+$("b-near-back").onclick = () => show("result");
+
+// Test hook: open the page with ?debug to drive the app from automated checks.
+if (new URLSearchParams(location.search).has("debug")) window.__eyesight = { app, show, renderNear };
