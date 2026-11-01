@@ -69,7 +69,43 @@ export function newLetterLine(letters) {
 export function nearEstimate(distanceMmValue) {
   if (distanceMmValue >= NEAR_FAR_ENOUGH_MM) return { kind: "none" };
   const d = 1000 / distanceMmValue;
-  return { kind: "myopia", d, lo: Math.max(0, d - NEAR_RANGE_D), hi: d + NEAR_RANGE_D };
+  const label = d < 3 ? "mild" : d < 6 ? "moderate" : "high";
+  return { kind: "myopia", d, lo: Math.max(0, d - NEAR_RANGE_D), hi: d + NEAR_RANGE_D, label };
+}
+
+function formatDistance(metres) {
+  return metres >= 1 ? `${Number(metres.toFixed(1))} metres` : `${Math.round(metres * 100)} cm`;
+}
+
+const BELOW_LARGEST = 0.02; // stand-in decimal acuity when even the largest line could not be read
+
+// Everyday-language version of one eye's result. `decimalAcuity` null = below the largest line.
+export function plainResult(decimalAcuity) {
+  const a = decimalAcuity ?? BELOW_LARGEST;
+  const level = a >= 0.8 ? "green" : a >= 0.5 ? "yellow" : "red";
+  const title = { green: "Good", yellow: "A little weak", red: "Weak" }[level];
+  const advice = {
+    green: "No sign of a problem in this screening.",
+    yellow: "An eye check is a good idea - you may need glasses.",
+    red: "Please see an eye doctor.",
+  }[level];
+  let sentence;
+  if (decimalAcuity == null) sentence = "You could not read even the biggest letters at this distance.";
+  else if (a >= 1) sentence = "Your sight is as good as, or better than, normal.";
+  else sentence = `What a person with normal sight can read from 6 metres away, you need to come as close as ${formatDistance(6 * a)} to read.`;
+  const percentText = decimalAcuity == null ? "under 3%" : a >= 1 ? "100%+" : `${Math.round(a * 100)}%`;
+  const technical = decimalAcuity == null ? "below 6/240" : `${fraction(a)} (decimal ${a})`;
+  return { level, title, advice, sentence, percentText, technical };
+}
+
+// Overall verdict = the weaker eye; flags when the two eyes differ a lot (2x or more).
+export function compareEyes(rightAcuity, leftAcuity) {
+  const r = rightAcuity ?? BELOW_LARGEST;
+  const l = leftAcuity ?? BELOW_LARGEST;
+  const worst = Math.min(r, l);
+  const level = worst >= 0.8 ? "green" : worst >= 0.5 ? "yellow" : "red";
+  const differ = Math.max(r, l) / worst >= 2;
+  return { level, differ };
 }
 
 // null means the person could not read even the largest line.

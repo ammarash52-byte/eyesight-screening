@@ -41,3 +41,21 @@ input[type=range] { width: 100%; margin: 14px 0; }
 #answers button[data-a="down"] { grid-column: 2; grid-row: 3; }
 #answers button.wide { grid-column: 1 / -1; font-size: 1rem; }
 .tips { padding-left: 20px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.top h1 { margin: 0; }
+button.voice { padding: 6px 10px; font-size: .8rem; margin: 0; white-space: nowrap; }
+.card { background: #fff; border-radius: 12px; border-left: 8px solid #999; padding: 10px 14px; margin: 10px 0; }
+.card.green { border-color: #16a34a; }
+.card.yellow { border-color: #eab308; }
+.card.red { border-color: #dc2626; }
+.card p { margin: 6px 0; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 1.05rem; }
+.card-head .pct { font-size: 1.3rem; font-weight: 700; white-space: nowrap; }
+.card-head .pct small { font-weight: 400; font-size: .7rem; color: #555; display: block; text-align: right; }
+.card .tech { font-size: .75rem; color: #777; }
+.card.overall { background: #f8fafc; }
+.platebox { display: flex; justify-content: center; margin: 8px 0; }
+.pad-digits { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+.pad-digits button { padding: 14px 0; font-size: 1.2rem; font-weight: 700; }
+.pad-digits button.wide { grid-column: span 2; font-size: .95rem; font-weight: 600; }
+.pad-digits button.ok { grid-column: span 2; background: #2563eb; color: #fff; }

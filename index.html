@@ -10,13 +10,17 @@
 </head>
 <body>
 <main>
-  <header><h1>👁️ Eyesight Screening</h1></header>
+  <header class="top">
+    <h1>👁️ Eyesight Screening</h1>
+    <button id="b-voice" class="voice" hidden>🔊 Voice on</button>
+  </header>
 
   <!-- 1. Welcome -->
   <section id="s-welcome" class="screen active">
     <p class="warn">⚠️ This is a <b>screening estimate only</b>, not a medical diagnosis. Results depend on your screen, lighting and distance. If you have any concern, see an eye doctor.</p>
     <p>The test takes about 5 minutes. You will need a <b>credit / ATM / ID card</b> and a <b>tape or string</b>.</p>
-    <button id="b-welcome" class="primary">Start</button>
+    <button id="b-welcome" class="primary">Start eyesight test</button>
+    <button id="b-color-start">Colour blindness test (no camera needed)</button>
   </section>
 
   <!-- 2. Screen calibration -->
@@ -86,7 +90,33 @@
     <div id="near-result"></div>
     <p class="warn">⚠️ Screening estimate only, not a medical diagnosis. See an eye doctor if you have any concern.</p>
     <button id="b-near" class="primary">Extra test: estimate nearsightedness</button>
+    <button id="b-color-from-result">Colour blindness test</button>
     <button id="b-again">Finish / test again</button>
+  </section>
+
+  <!-- 8. Colour blindness test -->
+  <section id="s-color" class="screen">
+    <div id="color-intro">
+      <h2>Colour blindness test</h2>
+      <ul class="tips">
+        <li>Set the screen to <b>full brightness</b>. Turn off <b>night mode / blue-light filter / dark mode</b>.</li>
+        <li>Use <b>normal daylight or a white light</b>. Take off any tinted glasses.</li>
+        <li>For each circle, type the <b>number you see</b>, then press OK. If you see no number, press <b>Nothing</b>.</li>
+        <li>Answer quickly - don't stare. The first plate is a practice plate.</li>
+      </ul>
+      <button id="b-color-go" class="primary">Start</button>
+    </div>
+    <div id="color-plate" hidden>
+      <p id="color-progress" class="status"></p>
+      <div class="platebox"><canvas id="plate-canvas"></canvas></div>
+      <div id="color-typed" class="typed"></div>
+      <div id="color-pad" class="pad-digits"></div>
+    </div>
+    <div id="color-result" hidden>
+      <div id="color-result-card"></div>
+      <p class="warn">⚠️ This checks the most common red-green type only, on a phone screen. It is a screening, not a medical colour test.</p>
+      <button id="b-color-done" class="primary">Done</button>
+    </div>
   </section>
 
   <!-- 7. Nearsightedness estimate (far-point method) -->

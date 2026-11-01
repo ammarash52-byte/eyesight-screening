@@ -1,6 +1,8 @@
 import * as V from "./vision.js";
 import * as cam from "./camera.js";
 import { SLOAN, letterSvg } from "./letters.js";
+import * as voice from "./voice.js";
+import * as color from "./color.js";
 
 const $ = (id) => document.getElementById(id);
 const CAL_DISTANCE_MM = 500;
@@ -27,6 +29,21 @@ const app = {
   test: null,
   near: null,
 };
+
+// ---- voice guidance toggle ---------------------------------------------------
+const speak = voice.speak;
+function refreshVoiceButton() {
+  $("b-voice").textContent = voice.isEnabled() ? "🔊 Voice on" : "🔇 Voice off";
+}
+if (voice.isSupported()) {
+  $("b-voice").hidden = false;
+  refreshVoiceButton();
+  $("b-voice").onclick = () => {
+    voice.setEnabled(!voice.isEnabled());
+    refreshVoiceButton();
+    speak("Voice guidance is on.", true);
+  };
+}
 
 function show(name) {
   app.screen = name;
@@ -176,6 +193,8 @@ $("b-cal-skip").onclick = () => goSetup();
 
 // ---- setup + live guide ----------------------------------------------------
 async function goSetup() {
+  app.lastSpokenStatus = null;
+  app.lastSpokenLight = null;
   show("setup");
   await cam.attach($("setup-video"));
   app.targetMm = Number($("dist-select").value) * 1000;
@@ -208,6 +227,15 @@ function updateSetupUI() {
     sig.className = "signal bad";
   }
   const ls = live.light == null ? null : V.lightStatus(live.light);
+  if (faceVisible) {
+    const status = V.distanceStatus(live.mm, app.targetMm);
+    if (status !== app.lastSpokenStatus) {
+      app.lastSpokenStatus = status;
+      speak({ near: "Too close. Move back.", far: "Too far. Move closer.", ok: "Perfect. Hold still, then press Start test." }[status]);
+    }
+  }
+  if (ls && ls !== "ok" && ls !== app.lastSpokenLight) speak(ls === "dark" ? "The room is too dark." : "There is too much glare.");
+  app.lastSpokenLight = ls;
   const lightEl = $("light-signal");
   lightEl.textContent = { dark: "💡 Too dark - turn on more light", glare: "💡 Very bright / glare - reduce direct light", ok: "💡 Lighting looks fine" }[ls] || "";
   lightEl.className = `signal small ${ls === "ok" ? "ok" : ls ? "bad" : ""}`;
@@ -239,10 +267,12 @@ function newSequence() {
 }
 
 function beginEye(eye) {
+  app.lastGuard = "";
   Object.assign(app.test, { eye, li: 0, lastPass: null, seq: newSequence(), pos: 0, wrong: 0, typed: [], phase: "test" });
   show("test");
   cam.attach($("test-video"));
   renderTest();
+  speak(`Testing your ${eye.toLowerCase()} eye. Cover your ${eye === "Right" ? "left" : "right"} eye with your palm.`, true);
 }
 
 function eSvg(px, direction) {
@@ -316,6 +346,15 @@ function updateTestGuard() {
   }
   msg.hidden = !text;
   msg.textContent = text;
+  if (text !== app.lastGuard) {
+    if (text) {
+      const status = faceLost ? null : V.distanceStatus(live.mm, app.targetMm);
+      speak(faceLost ? "I can't see your face." : status === "near" ? "Too close. Move back." : "Too far. Move closer.");
+    } else if (app.lastGuard) {
+      speak("Good. Continue.");
+    }
+    app.lastGuard = text;
+  }
   $("test-dist").textContent = live.mm ? `Distance: ${Math.round(live.mm / 10)} cm` : "";
   $("test-dist").className = `signal small ${text ? "bad" : "ok"}`;
 }
@@ -326,6 +365,7 @@ function finishEye() {
   if (t.eye === "Right") {
     t.phase = "switch";
     renderTest();
+    speak("Right eye done. Now cover your right eye, then press Continue.", true);
   } else {
     showResult();
   }
@@ -357,15 +397,32 @@ $("answers").onclick = (e) => {
 $("b-continue").onclick = () => beginEye("Left");
 
 // ---- result ----------------------------------------------------------------
+const ICON = { green: "🟢", yellow: "🟡", red: "🔴" };
+
+function eyeCard(eye, acuity) {
+  const r = V.plainResult(acuity);
+  return `<div class="card ${r.level}">
+    <div class="card-head"><b>${ICON[r.level]} ${eye} eye: ${r.title}</b>
+      <span class="pct">${r.percentText}<small>of normal sight</small></span></div>
+    <p>${r.sentence}</p><p>${r.advice}</p>
+    <p class="tech">For your doctor: ${r.technical}</p></div>`;
+}
+
 function showResult() {
-  const rows = ["Right", "Left"].map((eye) => {
-    const acuity = app.test.results[eye];
-    const [category, advice] = V.grade(acuity);
-    const shown = acuity ? `${V.fraction(acuity)} (decimal ${acuity})` : "below the largest line";
-    return `<p><b>${eye} eye:</b> ${category} - best line read: ${shown}. ${advice}</p>`;
-  });
-  $("result").innerHTML = rows.join("");
+  const { Right, Left } = app.test.results;
+  const overall = V.compareEyes(Right, Left);
+  const verdict = {
+    green: "Overall: your sight looks good.",
+    yellow: "Overall: your sight is a little weak - an eye check is a good idea.",
+    red: "Overall: your sight is weak - please see an eye doctor.",
+  }[overall.level];
+  const differ = overall.differ ? " Your two eyes see quite differently, which is worth checking too." : "";
+  $("result").innerHTML =
+    `<div class="card overall ${overall.level}"><p><b>${ICON[overall.level]} ${verdict}</b>${differ}</p></div>` +
+    eyeCard("Right", Right) + eyeCard("Left", Left);
   show("result");
+  const sayEye = (eye, a) => { const r = V.plainResult(a); return `${eye} eye: ${r.title}, about ${r.percentText.replace("%+", " percent or more").replace("%", " percent")} of normal sight.`; };
+  speak(`${verdict} ${sayEye("Right", Right)} ${sayEye("Left", Left)}`, true);
 }
 
 $("b-again").onclick = () => {
@@ -419,6 +476,7 @@ function updateNearUI() {
   } else if (live.mm < V.NEAR_MIN_MM) {
     sig.textContent = `Too close to measure (${Math.round(live.mm / 10)} cm) - move back a little`;
     sig.className = "signal bad";
+    speak("Too close to measure. Move back a little.");
   } else {
     sig.textContent = `Distance: ${Math.round(live.mm / 10)} cm`;
     sig.className = "signal ok";
@@ -441,6 +499,7 @@ $("b-near-clear").onclick = () => {
   n.capturedMm = mm;
   n.phase = "enter";
   n.typed = [];
+  speak("Stay at this distance and tap the letters you can read.", true);
   $("near-dist").textContent = `Measured distance: ${Math.round(mm / 10)} cm. Stay at this distance and read the letters.`;
   $("near-dist").className = "signal ok";
   renderNear();
@@ -466,18 +525,97 @@ $("near-pad").onclick = (e) => {
     ? "You moved while answering. Hold still at the distance where it first became clear, then try again."
     : "Not quite right - bring the phone a little closer until the letters are really clear, then try again.";
   $("near-dist").className = "signal bad";
+  speak(moved ? "You moved. Hold still and try again." : "Not quite right. Bring the phone a little closer and try again.", true);
 };
 
 function nearResultHtml(mm) {
   const cm = Math.round(mm / 10);
   const est = V.nearEstimate(mm);
   if (est.kind === "none") {
-    return `<h3>Nearsightedness estimate</h3><p>You read the tiny letters clearly from about <b>${cm} cm</b> (arm's length). Significant nearsightedness is unlikely. This test cannot detect farsightedness or astigmatism.</p>`;
+    speak("You read the tiny letters from arm's length, so strong nearsightedness is unlikely.", true);
+    return `<div class="card green"><div class="card-head"><b>🟢 Nearsightedness: unlikely</b></div>
+      <p>You read the tiny letters clearly from about <b>${cm} cm</b> (arm's length).</p>
+      <p class="tech">This test cannot detect farsightedness or astigmatism.</p></div>`;
   }
-  return `<h3>Nearsightedness estimate</h3><p>You read the tiny letters clearly at about <b>${cm} cm</b>. Rough estimate: about <b>-${est.lo.toFixed(1)} to -${est.hi.toFixed(1)}</b> (best guess -${est.d.toFixed(1)}). This is only a rough guide for nearsightedness (not for farsightedness or astigmatism) and is less reliable over age 40. An eye test gives the real number.</p>`;
+  const level = est.label === "mild" ? "yellow" : "red";
+  speak(`You can see clearly only up to about ${cm} centimetres. This suggests ${est.label} nearsightedness.`, true);
+  return `<div class="card ${level}"><div class="card-head"><b>${ICON[level]} Nearsightedness: ${est.label}</b>
+      <span class="pct">-${est.d.toFixed(1)}<small>rough guess</small></span></div>
+    <p>Without glasses, things farther than about <b>${cm} cm</b> look blurry to you.</p>
+    <p>Rough range: <b>-${est.lo.toFixed(1)} to -${est.hi.toFixed(1)}</b>. An eye doctor can give the exact number.</p>
+    <p class="tech">Only a rough guide for nearsightedness (not farsightedness or astigmatism); less reliable over age 40.</p></div>`;
 }
 
 $("b-near-back").onclick = () => show("result");
 
+// ---- colour blindness test -------------------------------------------------
+const colorState = { idx: 0, typed: "", correct: 0, practiceOk: null, from: "welcome" };
+
+function openColor(from) {
+  colorState.from = from;
+  $("color-intro").hidden = false;
+  $("color-plate").hidden = true;
+  $("color-result").hidden = true;
+  show("color");
+}
+$("b-color-start").onclick = () => openColor("welcome");
+$("b-color-from-result").onclick = () => openColor("result");
+
+function buildColorPad() {
+  const pad = $("color-pad");
+  if (pad.dataset.built) return;
+  pad.dataset.built = "1";
+  pad.innerHTML = [..."1234567890"].map((d) => `<button data-a="${d}">${d}</button>`).join("") +
+    `<button data-a="back">⌫</button><button data-a="none" class="wide">Nothing</button><button data-a="ok" class="ok">OK</button>`;
+}
+
+function showPlate() {
+  const plate = color.PLATES[colorState.idx];
+  $("color-progress").textContent = plate.practice
+    ? "Practice plate - everyone should see a number"
+    : `Plate ${colorState.idx} of ${color.SCORED}`;
+  color.drawPlate($("plate-canvas"), plate, Math.min(window.innerWidth - 32, 340), window.devicePixelRatio || 1);
+  colorState.typed = "";
+  $("color-typed").textContent = "";
+}
+
+$("b-color-go").onclick = () => {
+  Object.assign(colorState, { idx: 0, typed: "", correct: 0, practiceOk: null });
+  $("color-intro").hidden = true;
+  $("color-plate").hidden = false;
+  buildColorPad();
+  showPlate();
+};
+
+function submitPlate() {
+  const plate = color.PLATES[colorState.idx];
+  const right = colorState.typed === plate.number;
+  if (plate.practice) colorState.practiceOk = right;
+  else if (right) colorState.correct += 1;
+  colorState.idx += 1;
+  if (colorState.idx < color.PLATES.length) return showPlate();
+  const r = color.scoreColor(colorState.correct);
+  const unreliable = colorState.practiceOk === false
+    ? "<p><b>You could not read the practice plate</b>, so this result may not be reliable. Check the screen brightness and lighting, then try again.</p>" : "";
+  $("color-result-card").innerHTML = `<div class="card ${r.level}"><div class="card-head"><b>${ICON[r.level]} ${r.title}</b>
+    <span class="pct">${colorState.correct}/${color.SCORED}<small>plates correct</small></span></div><p>${r.text}</p>${unreliable}</div>`;
+  $("color-plate").hidden = true;
+  $("color-result").hidden = false;
+  speak(`${r.title}. You read ${colorState.correct} of ${color.SCORED} plates correctly.`, true);
+}
+
+$("color-pad").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const a = b.dataset.a;
+  if (a === "back") colorState.typed = colorState.typed.slice(0, -1);
+  else if (a === "none") { colorState.typed = ""; return submitPlate(); }
+  else if (a === "ok") return submitPlate();
+  else if (colorState.typed.length < 2) colorState.typed += a;
+  $("color-typed").textContent = colorState.typed;
+};
+
+$("b-color-done").onclick = () => show(colorState.from === "result" && app.test?.results?.Left !== undefined ? "result" : "welcome");
+
 // Test hook: open the page with ?debug to drive the app from automated checks.
-if (new URLSearchParams(location.search).has("debug")) window.__eyesight = { app, show, renderNear };
+if (new URLSearchParams(location.search).has("debug")) window.__eyesight = { app, show, renderNear, colorState };
