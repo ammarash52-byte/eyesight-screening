@@ -3,6 +3,7 @@ import * as cam from "./camera.js";
 import { SLOAN, letterSvg } from "./letters.js";
 import * as voice from "./voice.js";
 import * as color from "./color.js";
+import * as ui from "./ui.js";
 
 const $ = (id) => document.getElementById(id);
 const CAL_DISTANCE_MM = 500;
@@ -33,7 +34,9 @@ const app = {
 // ---- voice guidance toggle ---------------------------------------------------
 const speak = voice.speak;
 function refreshVoiceButton() {
-  $("b-voice").textContent = voice.isEnabled() ? "🔊 Voice on" : "🔇 Voice off";
+  const on = voice.isEnabled();
+  $("b-voice").dataset.on = String(on);
+  $("b-voice").querySelector("span").textContent = on ? "Voice on" : "Voice off";
 }
 if (voice.isSupported()) {
   $("b-voice").hidden = false;
@@ -48,18 +51,27 @@ if (voice.isSupported()) {
 function show(name) {
   app.screen = name;
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === `s-${name}`));
+  ui.setProgress(name);
+  window.scrollTo(0, 0);
 }
+
+// ---- static artwork and distance rings ----------------------------------------
+$("brand-mark").innerHTML = ui.brandMarkup();
+$("hero-iris").innerHTML = ui.irisMarkup();
+ui.mountFocus($("focus-setup"));
+ui.mountFocus($("focus-near"));
+ui.mountFocus($("focus-pause"), { compact: true });
 
 // ---- screen calibration ----------------------------------------------------
 $("b-welcome").onclick = () => {
-  if (app.pxPerMm) $("card-slider").value = Math.round(app.pxPerMm * V.CARD_WIDTH_MM);
+  if (app.pxPerMm) $("card-slider").value = Math.round(app.pxPerMm * V.CARD_SHORT_MM);
   setBar($("card-slider").value);
   show("screen");
 };
 function setBar(px) { $("card-bar").style.width = `${px}px`; }
 $("card-slider").oninput = (e) => setBar(e.target.value);
 $("b-screen").onclick = async () => {
-  app.pxPerMm = Number($("card-slider").value) / V.CARD_WIDTH_MM;
+  app.pxPerMm = Number($("card-slider").value) / V.CARD_SHORT_MM;
   store.set("pxPerMm", app.pxPerMm);
   show("camera");
   await startCameraFlow($("cal-video"));
@@ -201,30 +213,24 @@ async function goSetup() {
 }
 $("dist-select").onchange = (e) => { app.targetMm = Number(e.target.value) * 1000; };
 
-function distanceMessage(status, mm) {
-  const now = `${Math.round(mm / 10)} cm`;
-  if (status === "near") return `Too close (${now}) - move back`;
-  if (status === "far") return `Too far (${now}) - move closer`;
-  return `Perfect distance (${now}) ✅`;
+function distanceMessage(status) {
+  if (status === "near") return "Too close. Move back.";
+  if (status === "far") return "Too far. Move closer.";
+  return "Perfect. Hold still.";
 }
 
 function updateSetupUI() {
   const live = app.live;
-  const sig = $("dist-signal");
   const faceVisible = performance.now() - live.lastFaceAt < 800 && live.mm != null;
   let distOk = false;
-  if (!faceVisible) {
-    sig.textContent = "Looking for your face...";
-    sig.className = "signal";
+  if (live.light == null) {
+    ui.setFocus($("focus-setup"), { status: "search", hint: "The camera is not sending video. Go back and press Retry camera." });
+  } else if (!faceVisible) {
+    ui.setFocus($("focus-setup"), { status: "search", hint: "Looking for your face..." });
   } else {
     const status = V.distanceStatus(live.mm, app.targetMm);
     distOk = status === "ok";
-    sig.textContent = distanceMessage(status, live.mm);
-    sig.className = `signal ${distOk ? "ok" : "bad"}`;
-  }
-  if (live.light == null) {
-    sig.textContent = "Camera is not sending video - go back and press Retry camera.";
-    sig.className = "signal bad";
+    ui.setFocus($("focus-setup"), { status, mm: live.mm, targetMm: app.targetMm, hint: distanceMessage(status) });
   }
   const ls = live.light == null ? null : V.lightStatus(live.light);
   if (faceVisible) {
@@ -237,8 +243,9 @@ function updateSetupUI() {
   if (ls && ls !== "ok" && ls !== app.lastSpokenLight) speak(ls === "dark" ? "The room is too dark." : "There is too much glare.");
   app.lastSpokenLight = ls;
   const lightEl = $("light-signal");
-  lightEl.textContent = { dark: "💡 Too dark - turn on more light", glare: "💡 Very bright / glare - reduce direct light", ok: "💡 Lighting looks fine" }[ls] || "";
+  lightEl.textContent = { dark: "Too dark. Turn on more light.", glare: "Too much glare. Reduce direct light.", ok: "Lighting looks fine." }[ls] || "";
   lightEl.className = `signal small ${ls === "ok" ? "ok" : ls ? "bad" : ""}`;
+  if (distOk && ls === "ok") $("dist-signal").textContent = "";
   $("b-setup").disabled = !(distOk && ls === "ok");
 }
 
@@ -253,7 +260,7 @@ $("b-setup").onclick = () => {
   };
   const levels = V.usableLevels(app.targetMm / 1000, view);
   if (levels.length < 3) {
-    $("dist-signal").textContent = "This screen is too small for this distance - choose a different distance.";
+    $("dist-signal").textContent = "This screen is too small for this distance. Choose a different distance.";
     $("dist-signal").className = "signal bad";
     return;
   }
@@ -287,16 +294,12 @@ function buildPad() {
   const pad = $("answers");
   if (pad.dataset.mode === app.mode) return;
   pad.dataset.mode = app.mode;
-  pad.className = app.mode === "letters" ? "pad-letters" : "";
+  pad.className = app.mode === "letters" ? "pad pad-letters" : "pad pad-e";
   pad.innerHTML = app.mode === "letters"
     ? SLOAN.map((c) => `<button data-a="${c}">${c}</button>`).join("") +
-      `<button data-a="?" class="wide">🤷 Can't see this letter</button>`
-    : `<button data-a="up">⬆️</button><button data-a="left">⬅️</button><button data-a="right">➡️</button>
-       <button data-a="down">⬇️</button><button data-a="?" class="wide">🤷 Can't see</button>`;
-}
-
-function typedText(typed) {
-  return Array.from({ length: V.LETTERS_PER_LINE }, (_, i) => typed[i] ?? "•").join(" ");
+      `<button data-a="?" class="wide">I can't see this letter</button>`
+    : `<button data-a="up" aria-label="Up">↑</button><button data-a="left" aria-label="Left">←</button><button data-a="right" aria-label="Right">→</button>
+       <button data-a="down" aria-label="Down">↓</button><button data-a="?" class="wide">I can't see it</button>`;
 }
 
 function renderTest() {
@@ -306,23 +309,24 @@ function renderTest() {
   $("typed").hidden = switching || app.mode !== "letters";
   $("b-continue").hidden = !switching;
   $("letter-box").hidden = switching;
+  $("test-info").classList.toggle("switch", switching);
   if (switching) {
-    $("test-info").innerHTML = "<h3>Right eye done ✅</h3><p>Now cover your <b>right</b> eye with your palm, then press Continue.</p>";
+    $("test-info").innerHTML = `<h3>Right eye done</h3>${ui.coverMarkup("right")}<p>Now cover your <b>right</b> eye with your palm, then press Continue.</p>`;
     return;
   }
   buildPad();
   const cover = t.eye === "Right" ? "left" : "right";
   const how = app.mode === "letters"
-    ? "Read the 5 letters from left to right and tap each one below (tap 🤷 if you can't see it)."
+    ? "Read the 5 letters from left to right and tap each one below."
     : "Tap the direction the <b>E</b> points.";
-  $("test-info").innerHTML = `<p>Testing your <b>${t.eye.toLowerCase()}</b> eye. Cover your <b>${cover}</b> eye with your palm (don't press). ${how}</p>`;
+  $("test-info").innerHTML = `${ui.coverMarkup(cover)}<p>Testing your <b>${t.eye.toLowerCase()}</b> eye. Cover your <b>${cover}</b> eye with your palm, without pressing. ${how}</p>`;
   const px = V.letterHeightMm(t.levels[t.li], app.targetMm / 1000) * app.pxPerMm;
   const box = $("letter");
   if (app.mode === "letters") {
     box.style.gap = `${px * V.GAP_FACTOR}px`;
     box.style.padding = `${Math.max(px * 0.5, 24)}px 10px`;
     box.innerHTML = t.seq.map((c) => letterSvg(c, px)).join("");
-    $("typed").textContent = typedText(t.typed);
+    ui.renderSlots($("typed"), t.typed, V.LETTERS_PER_LINE);
   } else {
     box.style.gap = "0";
     box.style.padding = `${Math.max(px * 0.4, 24)}px`;
@@ -338,24 +342,25 @@ function updateTestGuard() {
   const msg = $("pause-msg");
   const faceLost = performance.now() - live.lastFaceAt > NO_FACE_GRACE_MS;
   let text = "";
+  let status = "search";
   if (faceLost) {
-    text = "Can't see your face - look at the screen and keep your head in view.";
+    text = "Can't see your face. Look at the screen and keep your head in view.";
   } else {
-    const status = V.distanceStatus(live.mm, app.targetMm);
-    if (status !== "ok") text = distanceMessage(status, live.mm);
+    status = V.distanceStatus(live.mm, app.targetMm);
+    if (status !== "ok") text = distanceMessage(status);
   }
   msg.hidden = !text;
-  msg.textContent = text;
+  $("pause-text").textContent = text;
+  if (text) ui.setFocus($("focus-pause"), { status, mm: live.mm, targetMm: app.targetMm });
   if (text !== app.lastGuard) {
     if (text) {
-      const status = faceLost ? null : V.distanceStatus(live.mm, app.targetMm);
       speak(faceLost ? "I can't see your face." : status === "near" ? "Too close. Move back." : "Too far. Move closer.");
     } else if (app.lastGuard) {
       speak("Good. Continue.");
     }
     app.lastGuard = text;
   }
-  $("test-dist").textContent = live.mm ? `Distance: ${Math.round(live.mm / 10)} cm` : "";
+  $("test-dist").textContent = live.mm ? `Distance ${Math.round(live.mm / 10)} cm` : "";
   $("test-dist").className = `signal small ${text ? "bad" : "ok"}`;
 }
 
@@ -392,37 +397,44 @@ function answer(choice) {
 
 $("answers").onclick = (e) => {
   const b = e.target.closest("button");
-  if (b) answer(b.dataset.a);
+  if (!b) return;
+  ui.tap(b);
+  answer(b.dataset.a);
 };
 $("b-continue").onclick = () => beginEye("Left");
 
 // ---- result ----------------------------------------------------------------
-const ICON = { green: "🟢", yellow: "🟡", red: "🔴" };
-
-function eyeCard(eye, acuity) {
+function gaugeFor(eye, acuity) {
   const r = V.plainResult(acuity);
-  return `<div class="card ${r.level}">
-    <div class="card-head"><b>${ICON[r.level]} ${eye} eye: ${r.title}</b>
-      <span class="pct">${r.percentText}<small>of normal sight</small></span></div>
-    <p>${r.sentence}</p><p>${r.advice}</p>
-    <p class="tech">For your doctor: ${r.technical}</p></div>`;
+  const percent = acuity == null ? 2 : Math.min(100, Math.round(Math.min(acuity, 1) * 100));
+  return ui.gaugeMarkup({ percent, display: r.percentText, level: r.level, label: `${eye} eye`, verdict: r.title });
+}
+
+function meaningBlock(results) {
+  const rows = ["Right", "Left"].map((eye) => `<li><b>${eye} eye:</b> ${V.plainResult(results[eye]).short}.</li>`).join("");
+  return `<h3>What this means</h3><p>A person with normal sight can read these letters from 6 metres away.</p><ul class="eyes">${rows}</ul>`;
 }
 
 function showResult() {
   const { Right, Left } = app.test.results;
   const overall = V.compareEyes(Right, Left);
   const verdict = {
-    green: "Overall: your sight looks good.",
-    yellow: "Overall: your sight is a little weak - an eye check is a good idea.",
-    red: "Overall: your sight is weak - please see an eye doctor.",
+    green: "Your sight looks good.",
+    yellow: "Your sight is a little weak. An eye check is a good idea.",
+    red: "Your sight is weak. Please see an eye doctor.",
   }[overall.level];
-  const differ = overall.differ ? " Your two eyes see quite differently, which is worth checking too." : "";
+  const differ = overall.differ ? "Your two eyes see quite differently, which is worth checking too." : "";
+  const technical = ["Right", "Left"].map((eye) => `<span>${eye}: ${V.plainResult(app.test.results[eye]).technical}</span>`).join("");
   $("result").innerHTML =
-    `<div class="card overall ${overall.level}"><p><b>${ICON[overall.level]} ${verdict}</b>${differ}</p></div>` +
-    eyeCard("Right", Right) + eyeCard("Left", Left);
+    `<div class="verdict ${overall.level}"><span class="dot"></span><p>${verdict}${differ ? `<small>${differ}</small>` : ""}</p></div>` +
+    `<div class="gauges">${gaugeFor("Right", Right)}${gaugeFor("Left", Left)}</div>` +
+    `<div class="meaning">${meaningBlock(app.test.results)}</div>` +
+    `<p class="doctor">For your doctor: ${technical}</p>`;
   show("result");
+  ui.animateGauges($("result"));
   const sayEye = (eye, a) => { const r = V.plainResult(a); return `${eye} eye: ${r.title}, about ${r.percentText.replace("%+", " percent or more").replace("%", " percent")} of normal sight.`; };
   speak(`${verdict} ${sayEye("Right", Right)} ${sayEye("Left", Left)}`, true);
+  $("near-result").innerHTML = "";
 }
 
 $("b-again").onclick = () => {
@@ -454,32 +466,31 @@ function renderNear() {
   row.innerHTML = n.seq.map((c) => letterSvg(c, px)).join("");
   $("near-entry").hidden = n.phase !== "enter";
   $("b-near-clear").hidden = n.phase !== "look";
-  $("near-typed").textContent = typedText(n.typed);
+  ui.renderSlots($("near-typed"), n.typed, V.LETTERS_PER_LINE);
   if (!$("near-pad").dataset.built) {
     $("near-pad").dataset.built = "1";
     $("near-pad").innerHTML = SLOAN.map((c) => `<button data-a="${c}">${c}</button>`).join("") +
-      `<button data-a="?" class="wide">🤷 Can't see this letter</button>`;
+      `<button data-a="?" class="wide">I can't see this letter</button>`;
   }
 }
 
 function updateNearUI() {
   const live = app.live;
-  const sig = $("near-dist");
-  if (app.near.phase === "enter") return; // keep the message from the capture step
+  const ring = $("focus-near");
   const faceVisible = performance.now() - live.lastFaceAt < 800 && live.mm != null;
+  if (app.near.phase === "enter") {
+    if (faceVisible) ui.setFocus(ring, { status: "ok", mm: live.mm, targetMm: app.near.capturedMm, hint: "Stay at this distance." });
+    return;
+  }
   if (live.light == null) {
-    sig.textContent = "Camera is not sending video.";
-    sig.className = "signal bad";
+    ui.setFocus(ring, { status: "search", hint: "The camera is not sending video." });
   } else if (!faceVisible) {
-    sig.textContent = "Looking for your face...";
-    sig.className = "signal";
+    ui.setFocus(ring, { status: "search", hint: "Looking for your face..." });
   } else if (live.mm < V.NEAR_MIN_MM) {
-    sig.textContent = `Too close to measure (${Math.round(live.mm / 10)} cm) - move back a little`;
-    sig.className = "signal bad";
+    ui.setFocus(ring, { status: "near", mm: live.mm, targetMm: 300, hint: "Too close to measure. Move back a little." });
     speak("Too close to measure. Move back a little.");
   } else {
-    sig.textContent = `Distance: ${Math.round(live.mm / 10)} cm`;
-    sig.className = "signal ok";
+    ui.setFocus(ring, { status: "info", mm: live.mm, targetMm: 300, hint: "Bring the phone closer until the letters are clear." });
   }
 }
 
@@ -500,7 +511,7 @@ $("b-near-clear").onclick = () => {
   n.phase = "enter";
   n.typed = [];
   speak("Stay at this distance and tap the letters you can read.", true);
-  $("near-dist").textContent = `Measured distance: ${Math.round(mm / 10)} cm. Stay at this distance and read the letters.`;
+  $("near-dist").textContent = `Measured distance: ${Math.round(mm / 10)} cm. Stay at this distance and tap the letters.`;
   $("near-dist").className = "signal ok";
   renderNear();
 };
@@ -509,6 +520,7 @@ $("near-pad").onclick = (e) => {
   const b = e.target.closest("button");
   const n = app.near;
   if (!b || n.phase !== "enter") return;
+  ui.tap(b);
   n.typed.push(b.dataset.a);
   if (n.typed.length < V.LETTERS_PER_LINE) return renderNear();
   const correct = n.typed.filter((c, i) => c === n.seq[i]).length;
@@ -516,14 +528,16 @@ $("near-pad").onclick = (e) => {
   const moved = nowMm != null && Math.abs(nowMm - n.capturedMm) / n.capturedMm > NEAR_STABLE_RATIO;
   if (correct >= V.LETTERS_PER_LINE - 1 && !moved) {
     $("near-result").innerHTML = nearResultHtml(n.capturedMm);
-    return show("result");
+    show("result");
+    $("near-result").scrollIntoView?.({ behavior: "smooth", block: "start" });
+    return;
   }
   // Not accepted: new letters, ask the person to try again.
   app.near = { phase: "look", seq: V.newLetterLine(SLOAN), typed: [], capturedMm: null };
   renderNear();
   $("near-dist").textContent = moved
     ? "You moved while answering. Hold still at the distance where it first became clear, then try again."
-    : "Not quite right - bring the phone a little closer until the letters are really clear, then try again.";
+    : "Not quite right. Bring the phone a little closer until the letters are really clear, then try again.";
   $("near-dist").className = "signal bad";
   speak(moved ? "You moved. Hold still and try again." : "Not quite right. Bring the phone a little closer and try again.", true);
 };
@@ -533,17 +547,17 @@ function nearResultHtml(mm) {
   const est = V.nearEstimate(mm);
   if (est.kind === "none") {
     speak("You read the tiny letters from arm's length, so strong nearsightedness is unlikely.", true);
-    return `<div class="card green"><div class="card-head"><b>🟢 Nearsightedness: unlikely</b></div>
-      <p>You read the tiny letters clearly from about <b>${cm} cm</b> (arm's length).</p>
-      <p class="tech">This test cannot detect farsightedness or astigmatism.</p></div>`;
+    return `<div class="panel"><div class="panel-head"><h3><span class="dot green"></span>Nearsightedness: unlikely</h3></div>
+      <p>You read the tiny letters clearly from about <b>${cm} cm</b>, which is arm's length.</p>
+      <p class="fine">This test cannot detect farsightedness or astigmatism.</p></div>`;
   }
   const level = est.label === "mild" ? "yellow" : "red";
   speak(`You can see clearly only up to about ${cm} centimetres. This suggests ${est.label} nearsightedness.`, true);
-  return `<div class="card ${level}"><div class="card-head"><b>${ICON[level]} Nearsightedness: ${est.label}</b>
-      <span class="pct">-${est.d.toFixed(1)}<small>rough guess</small></span></div>
+  return `<div class="panel"><div class="panel-head"><h3><span class="dot ${level}"></span>Nearsightedness: ${est.label}</h3>
+      <div class="big-number">-${est.d.toFixed(1)}<small>rough guess</small></div></div>
     <p>Without glasses, things farther than about <b>${cm} cm</b> look blurry to you.</p>
     <p>Rough range: <b>-${est.lo.toFixed(1)} to -${est.hi.toFixed(1)}</b>. An eye doctor can give the exact number.</p>
-    <p class="tech">Only a rough guide for nearsightedness (not farsightedness or astigmatism); less reliable over age 40.</p></div>`;
+    <p class="fine">Only a rough guide for nearsightedness, not for farsightedness or astigmatism. Less reliable over age 40.</p></div>`;
 }
 
 $("b-near-back").onclick = () => show("result");
@@ -566,17 +580,17 @@ function buildColorPad() {
   if (pad.dataset.built) return;
   pad.dataset.built = "1";
   pad.innerHTML = [..."1234567890"].map((d) => `<button data-a="${d}">${d}</button>`).join("") +
-    `<button data-a="back">⌫</button><button data-a="none" class="wide">Nothing</button><button data-a="ok" class="ok">OK</button>`;
+    `<button data-a="back" aria-label="Delete">⌫</button><button data-a="none" class="wide">Nothing</button><button data-a="ok" class="ok">OK</button>`;
 }
 
 function showPlate() {
   const plate = color.PLATES[colorState.idx];
   $("color-progress").textContent = plate.practice
-    ? "Practice plate - everyone should see a number"
+    ? "Practice plate. Everyone should see a number."
     : `Plate ${colorState.idx} of ${color.SCORED}`;
-  color.drawPlate($("plate-canvas"), plate, Math.min(window.innerWidth - 32, 340), window.devicePixelRatio || 1);
+  color.drawPlate($("plate-canvas"), plate, Math.min(window.innerWidth - 36, 340), window.devicePixelRatio || 1);
   colorState.typed = "";
-  $("color-typed").textContent = "";
+  ui.renderSlots($("color-typed"), [], 2);
 }
 
 $("b-color-go").onclick = () => {
@@ -597,10 +611,13 @@ function submitPlate() {
   const r = color.scoreColor(colorState.correct);
   const unreliable = colorState.practiceOk === false
     ? "<p><b>You could not read the practice plate</b>, so this result may not be reliable. Check the screen brightness and lighting, then try again.</p>" : "";
-  $("color-result-card").innerHTML = `<div class="card ${r.level}"><div class="card-head"><b>${ICON[r.level]} ${r.title}</b>
-    <span class="pct">${colorState.correct}/${color.SCORED}<small>plates correct</small></span></div><p>${r.text}</p>${unreliable}</div>`;
+  $("color-result-card").innerHTML = `<div class="color-result">
+    ${ui.ringMarkup({ fraction: colorState.correct / color.SCORED, level: r.level, big: `${colorState.correct}/${color.SCORED}`, small: "plates" })}
+    <div><h3>${r.title}</h3><p>${r.text}</p>${unreliable}</div></div>`;
   $("color-plate").hidden = true;
   $("color-result").hidden = false;
+  ui.animateGauges($("color-result-card"));
+  window.scrollTo(0, 0);
   speak(`${r.title}. You read ${colorState.correct} of ${color.SCORED} plates correctly.`, true);
 }
 
@@ -608,14 +625,17 @@ $("color-pad").onclick = (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   const a = b.dataset.a;
+  ui.tap(b);
   if (a === "back") colorState.typed = colorState.typed.slice(0, -1);
   else if (a === "none") { colorState.typed = ""; return submitPlate(); }
   else if (a === "ok") return submitPlate();
   else if (colorState.typed.length < 2) colorState.typed += a;
-  $("color-typed").textContent = colorState.typed;
+  ui.renderSlots($("color-typed"), [...colorState.typed], 2);
 };
 
-$("b-color-done").onclick = () => show(colorState.from === "result" && app.test?.results?.Left !== undefined ? "result" : "welcome");
+const leaveColor = () => show(colorState.from === "result" && app.test?.results?.Left !== undefined ? "result" : "welcome");
+$("b-color-done").onclick = leaveColor;
+$("b-color-intro-back").onclick = leaveColor;
 
 // Test hook: open the page with ?debug to drive the app from automated checks.
-if (new URLSearchParams(location.search).has("debug")) window.__eyesight = { app, show, renderNear, colorState };
+if (new URLSearchParams(location.search).has("debug")) window.__eyesight = { app, show, renderNear, colorState, ui };

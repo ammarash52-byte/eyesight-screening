@@ -1,6 +1,7 @@
 // Core screening logic (no DOM). Same rules as the Python prototype in ../eyesight-app/vision.py.
 
-export const CARD_WIDTH_MM = 85.6;       // ISO/IEC 7810 ID-1 card width
+// Short side of an ISO/IEC 7810 ID-1 card (bank / ID card). The long side (85.6 mm) is wider than most phone screens.
+export const CARD_SHORT_MM = 53.98;
 export const IRIS_DIAMETER_MM = 11.7;    // average horizontal visible iris diameter
 // 0.025-0.08 are extra-large lines (6/240 - 6/75) for very low vision.
 export const LEVELS = [0.025, 0.04, 0.05, 0.063, 0.08, 0.1, 0.125, 0.16, 0.2, 0.25, 0.32, 0.4, 0.5, 0.63, 0.8, 1.0, 1.25];
@@ -95,7 +96,11 @@ export function plainResult(decimalAcuity) {
   else sentence = `What a person with normal sight can read from 6 metres away, you need to come as close as ${formatDistance(6 * a)} to read.`;
   const percentText = decimalAcuity == null ? "under 3%" : a >= 1 ? "100%+" : `${Math.round(a * 100)}%`;
   const technical = decimalAcuity == null ? "below 6/240" : `${fraction(a)} (decimal ${a})`;
-  return { level, title, advice, sentence, percentText, technical };
+  // One-line form for side-by-side eyes (the 6-metre comparison is stated once above them).
+  const short = decimalAcuity == null ? "could not read even the biggest letters"
+    : a >= 1 ? "as good as normal, or better"
+    : `you need to come as close as ${formatDistance(6 * a)}`;
+  return { level, title, advice, sentence, short, percentText, technical };
 }
 
 // Overall verdict = the weaker eye; flags when the two eyes differ a lot (2x or more).

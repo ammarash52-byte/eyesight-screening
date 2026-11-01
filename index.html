@@ -3,136 +3,164 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#2f3d99">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>Eyesight Screening</title>
 <link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main>
   <header class="top">
-    <h1>👁️ Eyesight Screening</h1>
-    <button id="b-voice" class="voice" hidden>🔊 Voice on</button>
+    <div class="brand"><span id="brand-mark"></span>Eyesight Screening</div>
+    <button id="b-voice" class="voice" hidden aria-label="Turn voice guidance on or off">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="v-wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Voice on</span>
+    </button>
   </header>
 
-  <!-- 1. Welcome -->
+  <div id="progress" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" hidden><i></i><i></i><i></i><i></i><i></i></div>
+
+  <!-- Welcome -->
   <section id="s-welcome" class="screen active">
-    <p class="warn">⚠️ This is a <b>screening estimate only</b>, not a medical diagnosis. Results depend on your screen, lighting and distance. If you have any concern, see an eye doctor.</p>
-    <p>The test takes about 5 minutes. You will need a <b>credit / ATM / ID card</b> and a <b>tape or string</b>.</p>
+    <div id="hero-iris" class="hero"></div>
+    <h1 class="hero-title">Check your eyesight in about five minutes</h1>
+    <p class="lede">Letters are sized for your own screen, and your camera keeps you at exactly the right distance.</p>
+    <ul class="needs">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 10h19" stroke="currentColor" stroke-width="2"/></svg>A bank or ID card</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="8" width="19" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 8v3M12 8v4M17 8v3" stroke="currentColor" stroke-width="2"/></svg>A tape or string</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>A bright room</li>
+    </ul>
     <button id="b-welcome" class="primary">Start eyesight test</button>
-    <button id="b-color-start">Colour blindness test (no camera needed)</button>
+    <button id="b-color-start">Colour vision test, no camera needed</button>
+    <p class="note">This is a screening estimate, not a medical diagnosis. Results depend on your screen, lighting and distance. If you have any concern, see an eye doctor.</p>
   </section>
 
-  <!-- 2. Screen calibration -->
+  <!-- Screen calibration -->
   <section id="s-screen" class="screen">
-    <h2>Step 1 - Calibrate the screen</h2>
-    <p>Hold the card flat against the screen. Move the slider until the blue bar is <b>exactly as wide as the card</b>.</p>
-    <div id="card-bar">Card width</div>
-    <input id="card-slider" type="range" min="120" max="900" value="324">
+    <h2>Match your card to the screen</h2>
+    <p>Take a bank or ID card and hold it flat against the screen with its <b>short side</b> across the screen. Drag the slider until the bar below is <b>exactly as wide as the short side of your card</b>.</p>
+    <div id="card-bar"><span class="card-label">Short side of your card</span></div>
+    <input id="card-slider" type="range" min="200" max="480" value="340" aria-label="Width of the card's short side">
     <button id="b-screen" class="primary">Next</button>
   </section>
 
-  <!-- 3. Camera calibration (once) -->
+  <!-- Camera calibration (once per device) -->
   <section id="s-camera" class="screen">
-    <h2>Step 2 - Calibrate the camera</h2>
-    <p>Measure <b id="cal-cm">50 cm</b> with your tape from the camera to your eyes. Sit still at exactly that distance, look at the camera, then press Calibrate.</p>
-    <div class="videobox"><video id="cal-video" playsinline muted></video></div>
+    <h2>Teach the camera your distance</h2>
+    <p>Measure <b id="cal-cm">50 cm</b> with your tape from the camera to your eyes. Sit still at that distance, look at the camera, then press Calibrate.</p>
+    <div class="camera">
+      <video id="cal-video" playsinline muted></video>
+      <svg class="face-guide" viewBox="0 0 400 300" aria-hidden="true" preserveAspectRatio="xMidYMid slice"><path d="M0 0H400V300H0Z M105 150a95 120 0 1 0 190 0a95 120 0 1 0 -190 0Z" fill="rgba(13,21,32,.55)" fill-rule="evenodd"/><ellipse cx="200" cy="150" rx="95" ry="120" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 9" opacity=".85"/></svg>
+    </div>
     <p id="cal-status" class="status">Starting camera...</p>
-    <p id="debug" class="status small"></p>
     <button id="b-cal" class="primary" disabled>Calibrate</button>
     <button id="b-cal-retry" class="link" hidden>Retry camera</button>
-    <button id="b-cal-skip" class="link" hidden>Already calibrated on this device - skip</button>
+    <button id="b-cal-skip" class="link" hidden>Already calibrated on this device, skip</button>
+    <details class="tech"><summary>Technical info</summary><p id="debug" class="status"></p></details>
   </section>
 
-  <!-- 4. Setup + live distance guide -->
+  <!-- Setup + live distance guide -->
   <section id="s-setup" class="screen">
-    <h2>Step 3 - Get in position</h2>
-    <label>Test type
-      <select id="mode-select">
-        <option value="letters" selected>Letters (C D H K N O R S V Z)</option>
-        <option value="e">Tumbling E (children / cannot read letters)</option>
-      </select>
-    </label>
-    <label>Test distance
-      <select id="dist-select">
-        <option value="0.4">40 cm (phone)</option>
-        <option value="0.5" selected>50 cm</option>
-        <option value="0.6">60 cm</option>
-        <option value="1.0">100 cm (laptop / webcam)</option>
-      </select>
-    </label>
-    <ul class="tips">
-      <li>Sit in a <b>bright room</b>, light behind or beside you, no glare on the screen.</li>
-      <li>Set the screen to <b>maximum brightness</b>.</li>
-      <li>Take your <b>glasses off</b>.</li>
-    </ul>
-    <div class="videobox"><video id="setup-video" playsinline muted></video></div>
-    <div id="dist-signal" class="signal">Looking for your face...</div>
+    <h2>Get in position</h2>
+    <div class="field-row">
+      <label>Test type
+        <select id="mode-select">
+          <option value="letters" selected>Letters (C D H K N O R S V Z)</option>
+          <option value="e">Tumbling E (children, or if you cannot read letters)</option>
+        </select>
+      </label>
+      <label>Test distance
+        <select id="dist-select">
+          <option value="0.4">40 cm (phone)</option>
+          <option value="0.5" selected>50 cm</option>
+          <option value="0.6">60 cm</option>
+          <option value="1.0">100 cm (laptop or webcam)</option>
+        </select>
+      </label>
+    </div>
+    <div id="focus-setup"></div>
     <div id="light-signal" class="signal small"></div>
+    <div id="dist-signal" class="signal"></div>
+    <ul class="tips">
+      <li>Light behind or beside you, no glare on the screen.</li>
+      <li>Screen at maximum brightness.</li>
+      <li>Glasses off.</li>
+    </ul>
+    <div class="camera mini"><video id="setup-video" playsinline muted></video></div>
     <button id="b-setup" class="primary" disabled>Start test</button>
   </section>
 
-  <!-- 5. Test -->
+  <!-- Test -->
   <section id="s-test" class="screen">
-    <div id="test-info"></div>
-    <div id="letter-box"><div id="letter"></div><div id="pause-msg" hidden></div></div>
-    <div id="typed" class="typed"></div>
-    <div id="test-dist" class="signal small"></div>
-    <div class="videobox mini"><video id="test-video" playsinline muted></video></div>
+    <div id="test-info" class="test-info"></div>
+    <div id="letter-box">
+      <div id="letter"></div>
+      <div id="pause-msg" hidden><div id="focus-pause"></div><p id="pause-text"></p></div>
+    </div>
+    <div id="typed" class="slots"></div>
     <div id="answers"></div>
+    <div id="test-dist" class="signal small"></div>
     <button id="b-continue" class="primary" hidden>Continue</button>
+    <div class="camera mini"><video id="test-video" playsinline muted></video></div>
   </section>
 
-  <!-- 6. Result -->
+  <!-- Result -->
   <section id="s-result" class="screen">
-    <h2>Your screening result</h2>
+    <h2>Your result</h2>
     <div id="result"></div>
     <div id="near-result"></div>
-    <p class="warn">⚠️ Screening estimate only, not a medical diagnosis. See an eye doctor if you have any concern.</p>
-    <button id="b-near" class="primary">Extra test: estimate nearsightedness</button>
-    <button id="b-color-from-result">Colour blindness test</button>
-    <button id="b-again">Finish / test again</button>
+    <p class="note">This is a screening estimate, not a medical diagnosis. See an eye doctor if you have any concern.</p>
+    <button id="b-near" class="primary">Estimate nearsightedness</button>
+    <button id="b-color-from-result">Colour vision test</button>
+    <button id="b-again" class="link">Finish and start over</button>
   </section>
 
-  <!-- 8. Colour blindness test -->
+  <!-- Colour vision test -->
   <section id="s-color" class="screen">
     <div id="color-intro">
-      <h2>Colour blindness test</h2>
+      <h2>Colour vision test</h2>
       <ul class="tips">
-        <li>Set the screen to <b>full brightness</b>. Turn off <b>night mode / blue-light filter / dark mode</b>.</li>
-        <li>Use <b>normal daylight or a white light</b>. Take off any tinted glasses.</li>
-        <li>For each circle, type the <b>number you see</b>, then press OK. If you see no number, press <b>Nothing</b>.</li>
-        <li>Answer quickly - don't stare. The first plate is a practice plate.</li>
+        <li>Set the screen to <b>full brightness</b>. Turn off <b>night mode, blue-light filter and dark mode</b>.</li>
+        <li>Use daylight or a white light, and take off any tinted glasses.</li>
+        <li>Type the <b>number you see</b> in each circle, then press OK. If you see no number, press <b>Nothing</b>.</li>
+        <li>Answer quickly and don't stare. The first plate is a practice.</li>
       </ul>
       <button id="b-color-go" class="primary">Start</button>
+      <button id="b-color-intro-back" class="link">Back</button>
     </div>
     <div id="color-plate" hidden>
       <p id="color-progress" class="status"></p>
       <div class="platebox"><canvas id="plate-canvas"></canvas></div>
-      <div id="color-typed" class="typed"></div>
-      <div id="color-pad" class="pad-digits"></div>
+      <div id="color-typed" class="slots"></div>
+      <div id="color-pad" class="pad pad-digits"></div>
     </div>
     <div id="color-result" hidden>
       <div id="color-result-card"></div>
-      <p class="warn">⚠️ This checks the most common red-green type only, on a phone screen. It is a screening, not a medical colour test.</p>
+      <p class="note">This checks the most common red-green type only, on a phone screen. It is a screening, not a medical colour test.</p>
       <button id="b-color-done" class="primary">Done</button>
     </div>
   </section>
 
-  <!-- 7. Nearsightedness estimate (far-point method) -->
+  <!-- Nearsightedness estimate (far-point method) -->
   <section id="s-near" class="screen">
-    <h2>Nearsightedness estimate</h2>
-    <p>Hold the phone at <b>arm's length</b> with <b>both eyes open</b>, glasses off. The letters are very small. <b>Slowly bring the phone closer</b> until you can read <b>all 5 letters clearly</b>, then stop and press the button.</p>
-    <div class="videobox mini"><video id="near-video" playsinline muted></video></div>
-    <div id="near-dist" class="signal">Looking for your face...</div>
+    <h2>Estimate nearsightedness</h2>
+    <p>Hold the phone at <b>arm's length</b> with <b>both eyes open</b> and glasses off. <b>Slowly bring it closer</b> until you can read <b>all 5 tiny letters clearly</b>, then stop and press the button.</p>
+    <div id="focus-near"></div>
     <div id="near-letters" class="letterline"></div>
+    <div id="near-dist" class="signal"></div>
     <div id="near-entry" hidden>
       <p id="near-entry-msg"><b>Tap the 5 letters you saw, in order.</b></p>
-      <div id="near-typed" class="typed"></div>
-      <div id="near-pad" class="pad-letters"></div>
+      <div id="near-typed" class="slots"></div>
+      <div id="near-pad" class="pad pad-letters"></div>
     </div>
     <button id="b-near-clear" class="primary">I can read them clearly</button>
     <button id="b-near-back" class="link">Back to results</button>
+    <div class="camera mini"><video id="near-video" playsinline muted></video></div>
   </section>
 </main>
 <script type="module" src="js/app.js"></script>
